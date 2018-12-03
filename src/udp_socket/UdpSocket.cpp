@@ -71,10 +71,28 @@ int UdpSocket::runServer()
             printf("[server] receive data failed ! \n");
             return -1;
         }
-        printf("[server] receive info : %s \n", m_buf);
-        printf("[server] receive info : %d \n", sizeof(m_buf));
+        printf("[server] receive info : [%s] \n", m_buf);
+        sig_serverMsg(m_buf, strlen(m_buf));
         memset(m_buf, 0, m_buflen);
     }
+    return 0;
+}
+
+/**
+ * @brief UdpSocket::serverSend
+ *      server 发送信息
+ * @param buf : 信息
+ * @param len : 信息长度
+ * @return 成功返回0，失败返回-1
+ */
+int UdpSocket::serverSend(const char *buf, const int len)
+{
+    if(m_fd<0) {
+        printf("[serverSend] udp client not init! \n");
+        return -1;
+    }
+    socklen_t _socklen = sizeof(m_cliaddr);
+    sendto(m_fd, buf, len, 0, (struct sockaddr*)&m_cliaddr, _socklen);
     return 0;
 }
 
@@ -88,15 +106,31 @@ int UdpSocket::runClient()
     /// 1. 初始化 server socket
     m_fd = socket(AF_INET/* ipv4 */, SOCK_DGRAM /* udp */, 0);
     if(m_fd < 0) {
-        printf("create socket failed ! \n");
+        printf("[client] create socket failed ! \n");
         return -1;
     }
     /// 2. socket 地址配置
 
     /// 3. 发送信息
-    sprintf(m_buf, "udp client run ... \n");
+    sprintf(m_buf, "udp client run ... ");
     socklen_t _len = sizeof(m_seraddr);
     sendto(m_fd, m_buf, m_buflen, 0, (struct sockaddr*)&m_seraddr, _len);
+
+    int _count = 0;
+    while(1) {
+        /// no data, will blocking
+        /// 接收 client 端的数据
+        printf("[client] udp client run ...\n");
+        socklen_t _len = sizeof(m_seraddr);
+        _count = recvfrom(m_fd, m_buf, m_buflen, 0, (struct sockaddr*)&m_seraddr, &_len);
+        if(_count < 0) {
+            printf("[client] receive data failed ! \n");
+            return -1;
+        }
+        printf("[client] receive info : [%s] \n", m_buf);
+        sig_clientMsg(m_buf, strlen(m_buf));
+        memset(m_buf, 0, m_buflen);
+    }
     return 0;
 }
 
@@ -109,7 +143,7 @@ int UdpSocket::runClient()
  */
 int UdpSocket::clientSend(const char *buf, const int len)
 {
-    if(m_fd<0 || m_seraddr == nullptr) {
+    if(m_fd<0) {
         printf("[clientSend] udp client not init! \n");
         return -1;
     }

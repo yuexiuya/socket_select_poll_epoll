@@ -11,7 +11,7 @@
 #include <boost/signals2.hpp>
 
 using namespace std;
-using namespace boost;
+//using namespace boost;
 
 class UdpSocket {
 public:
@@ -29,11 +29,11 @@ public:
 
     /// server
     int runServer();
-//    signals2::signal<void (const char* buf)> sig_serverMsg;     /// server 接收到信息的回调
-    int serverSend(const char* buf);
+    boost::signals2::signal<void (const char* buf, const int len)> sig_serverMsg;     /// server 接收到信息的回调
+    int serverSend(const char* buf, const int len);
     /// client
     int runClient();
-//    signals2::signal<void (const char* buf)> sig_clientMsg;     /// client 接收到信息的回调
+    boost::signals2::signal<void (const char* buf, const int len)> sig_clientMsg;     /// client 接收到信息的回调
     int clientSend(const char* buf, const int len);
 
 private:
