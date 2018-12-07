@@ -24,6 +24,8 @@ int main(void) {
     udpSokcet.serverSend(_serMsg, strlen(_serMsg));
     std::this_thread::sleep_for(std::chrono::seconds(1));
     udpSokcet.clientSend(_cliMsg, strlen(_cliMsg));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
     while(1);
     return 0;
 }

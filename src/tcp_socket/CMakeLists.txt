@@ -3,5 +3,5 @@ FILE(GLOB SRC_LIST "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
                 "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
     )
 
-ADD_EXECUTABLE(udp_socket ${SRC_LIST})
-TARGET_LINK_LIBRARIES(udp_socket  pthread)
+ADD_EXECUTABLE(tcp_socket ${SRC_LIST})
+TARGET_LINK_LIBRARIES(tcp_socket pthread)
