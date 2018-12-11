@@ -58,12 +58,15 @@ int TcpSocket::initServer(const string ser_ip, const int ser_port, const int buf
 
     /// 5.accept
     printf("[ Server ] accept block.... ! \n");
-    m_confd = accept(m_serfd, NULL, NULL);
+    struct sockaddr_in _client; /// 这里可以获取到 client 的地址
+    socklen_t _client_len = sizeof(_client);
+    m_confd = accept(m_serfd, (sockaddr *)&_client, &_client_len);
     if( m_confd<0 ) {
         printf("[ Server ] socket accept failed ! \n");
         return -1;
+    } else {
+        printf("[ Server ] get a new client : %s \n", inet_ntoa(_client.sin_addr));
     }
-
     /// 6.建立事件循环
     while(1) {
         printf("[ Server ] recv block.... ! \n");
