@@ -1,30 +1,23 @@
-#include "SelectSocket.h"
+#include "PollSocket.h"
 #include <thread>
 
-SelectSocket::SelectSocket()
+PollSocket::PollSocket()
 {
-    m_socklen = 1024;
-    m_sockArray = new int[m_socklen];
-    memset(m_sockArray, -1, m_socklen);
-    m_clientList.clear();
+    m_pollClients = new pollfd[m_maxfd];
+    memset(m_pollClients, -1, m_maxfd);
 }
 
-SelectSocket::~SelectSocket()
+PollSocket::~PollSocket()
 {
     if(m_serbuf != nullptr) {
         delete []m_serbuf;
         m_serbuf = nullptr;
-        m_clilen = -1;
+        m_cbuflen = -1;
     }
     if(m_clibuf != nullptr) {
         delete []m_clibuf;
         m_clibuf = nullptr;
-        m_clilen = -1;
-    }
-    if(m_sockArray != nullptr) {
-        delete []m_sockArray;
-        m_sockArray = nullptr;
-        m_socklen = -1;
+        m_cbuflen = -1;
     }
 }
 
@@ -34,13 +27,11 @@ SelectSocket::~SelectSocket()
  * @param ser_port : 端口号
  * @return 成功返回0，失败返回-1
  */
-int SelectSocket::initServer(const string ser_ip, const int ser_port, const int bufsize)
+int PollSocket::initServer(const string ser_ip, const int ser_port, const int bufsize)
 {
     printf("[ Server ] \n");
     /// 分配 buffer
-    m_serlen = bufsize;
-    m_serbuf = new char[m_serlen];
-    memset(m_serbuf, -1, m_serlen);
+    setSbuflen(bufsize);
 
     /// 1.初始化 server socket
     m_serfd = socket(AF_INET/* ipv4 */, SOCK_STREAM/* tcp*/, 0);
@@ -69,27 +60,21 @@ int SelectSocket::initServer(const string ser_ip, const int ser_port, const int 
         return -1;
     }
 
-    /// 5. 建立 select - socket　工作模式
-    fd_set _rfds;
-    fd_set _wfds;
-    FD_ZERO(&_rfds);
-    FD_ZERO(&_wfds);
-    FD_SET(m_serfd, &_rfds);
-    FD_SET(m_serfd, &_wfds);
-    m_maxfd = m_serfd;
+    /// 5. 建立 select - poll　工作模式
+    m_pollClients[0].fd = m_serfd;
+    m_pollClients[0].events = POLLIN/** 有数据可读*/;
+    m_nfds = 1;
 
     while(1) {
-        ///　注册当前连接的 client 到 fd_set 中
-        /// select 模式
-        printf("[ Server ] select block.... ! \n");
-        int _ret = select(m_maxfd + 1, &_rfds, &_wfds, NULL, NULL);
+        /// poll 模式
+        printf("[ Server ] poll block.... ! \n");
+        int _ret = poll(m_pollClients, m_nfds/*len of pollfd */, -1 /** block waiting*/);
         if(_ret < 0) {
-            printf("[ Server ] select error \n");
+            printf("[ Server ] poll error \n");
             continue;
         } else {
-            /// 监听 server fd 上的变化
-            if(FD_ISSET(m_serfd, &_rfds)) {
-                /// 监听有无新的client
+            /// 监听有无新的client
+            if(m_pollClients[0].revents & POLLIN) {
                 struct sockaddr_in _client; /// 这里可以获取到 client 的地址
                 socklen_t _client_len = sizeof(_client);
                 int _confd = accept(m_serfd, (sockaddr *)&_client, &_client_len);
@@ -98,35 +83,55 @@ int SelectSocket::initServer(const string ser_ip, const int ser_port, const int 
                     continue;
                 } else {
                     printf("[ Server ] get a new client : %s \n", inet_ntoa(_client.sin_addr));
-                    m_clientList.push_back(_confd);
-                    FD_SET(_confd, &_rfds);
-                    m_maxfd = max(_confd, m_maxfd);
+                    /// 计算填充位置
+                    int _pos = 0;
+                    for(int i = 1; i < m_maxfd; i++)
+                    {
+                        if(m_pollClients[i].fd < 0)
+                        {
+                            _pos = i;
+                            break;
+                        }
+                    }
+                    /// 判断client是否已满
+                    if(_pos >= m_maxfd) {
+                        printf("[ Server ] client is max, can add it to lists \n");
+                        close(_confd);
+                        continue;
+                    }
+                    ///　填充m_pollClients
+                    m_pollClients[_pos].fd = _confd;
+                    m_pollClients[_pos].events = POLLIN;
+                    if(_pos + 1 > m_nfds)   /// m_nfds 为最右端有效值的位置
+                        m_nfds = _pos + 1;
                 }
             }
-            /// 监听现有client上的信息
-            for(int i = 0; i<m_clientList.size(); i++) {
-                if(m_clientList[i] < 0)
-                    continue;
-                if(FD_ISSET(m_serfd, &_rfds)) {
-                    int _ret = recv( m_clientList[i], (void*)m_serbuf, m_serlen, 0);
+            /// 遍历，监听client端的信息
+            int _pos2 = 1;
+            for(int i=1; i<m_nfds; i++) {
+                if(m_pollClients[i].revents & POLLIN) {
+                    int _ret = recv( m_pollClients[i].fd, (void*)m_serbuf, m_sbuflen, 0);
                     if(_ret < 0)
                     {
-                        printf( "[ Server ]  is empty !!!\n" );
-                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        printf( "[ Server ]  info is empty !!!\n" );
+                        _pos2 = i;
                         continue;
                     }
                     else if(_ret == 0)
                     {
                         printf( "[ Server ]  disconnect  !!!\n" );
-                        close( m_serfd );
-                        m_serfd = -1;
+                        close( m_pollClients[i].fd );
+                        m_pollClients[i].fd = -1;
                     }
                     else
                     {
                         printf( "[ Server ] data = %s  !!!\n", m_serbuf);
+                        _pos2 = i;
                     }
                 }
             }
+            if(_pos2 < m_nfds)
+                m_nfds = _pos2;
         }
     }
 }
@@ -138,12 +143,12 @@ int SelectSocket::initServer(const string ser_ip, const int ser_port, const int 
 // * @param len : 信息长度
 // * @return 成功返回0,失败返回-1
 // */
-int SelectSocket::initClient(const string ser_ip, const int ser_port, const int bufsize)
+int PollSocket::initClient(const string ser_ip, const int ser_port, const int bufsize)
 {
     printf("[ Client ] \n");
     /// 分配 buffer
-    m_clilen = bufsize;
-    m_clibuf = new char[m_clilen];
+    m_cbuflen = bufsize;
+    m_clibuf = new char[m_cbuflen];
 
     /// 1.初始化 client socket
     m_clifd = socket(AF_INET/* ipv4 */, SOCK_STREAM/* tcp*/, 0);
@@ -168,8 +173,8 @@ int SelectSocket::initClient(const string ser_ip, const int ser_port, const int 
     /// 6.建立事件循环
     while(1) {
         printf("[ Client ] recv block.... ! \n");
-        int _ret = recv(m_clifd, (void*)m_clibuf, m_clilen, 0);
-        sig_clientMsg(m_clibuf, strlen(m_clibuf));
+        int _ret = recv(m_clifd, (void*)m_clibuf, m_cbuflen, 0);
+//        sig_clientMsg(m_clibuf, strlen(m_clibuf));
         if(_ret < 0)
         {
             printf("[ Client ] buf is empty !!!\n" );
@@ -192,16 +197,49 @@ int SelectSocket::initClient(const string ser_ip, const int ser_port, const int 
 }
 
 /**
- * @brief SelectSocket::setSockArraySize
- * @param size : 数组大小
+ * @brief PollSocket::setSbuflen
+ *      设置　server 端 buf 长度
+ * @param sbuflen : len
  */
-void SelectSocket::setSockArraySize(const int size)
+void PollSocket::setSbuflen(int sbuflen)
 {
-    if(m_sockArray != nullptr) {
-        delete []m_sockArray;
-        m_sockArray = nullptr;
+    m_sbuflen = sbuflen;
+    if(m_serbuf != nullptr) {
+        delete []m_serbuf;
+        m_serbuf = nullptr;
     }
-    m_socklen = size;
-    m_sockArray = new int[m_socklen];
+    m_serbuf = new char[m_sbuflen];
+    memset(m_serbuf, 0, m_sbuflen);
+}
 
+/**
+ * @brief PollSocket::setSbuflen
+ *      设置　client 端 buf 长度
+ * @param cbuflen : len
+ */
+void PollSocket::setCbuflen(int cbuflen)
+{
+    m_cbuflen = cbuflen;
+    if(m_clibuf != nullptr) {
+        delete []m_clibuf;
+        m_clibuf = nullptr;
+    }
+    m_clibuf = new char[m_cbuflen];
+    memset(m_clibuf, 0, m_cbuflen);
+}
+
+/**
+ * @brief PollSocket::setMaxfd
+ *      设置　可监听的　client 的最大值
+ * @param maxfd
+ */
+void PollSocket::setMaxfd(int maxfd)
+{
+    m_maxfd = maxfd;
+    if(m_pollClients != nullptr) {
+        delete []m_pollClients;
+        m_pollClients = nullptr;
+    }
+    m_pollClients = new pollfd[m_maxfd];
+    memset(m_pollClients, -1, m_maxfd);
 }

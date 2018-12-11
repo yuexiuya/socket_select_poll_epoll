@@ -16,6 +16,17 @@
 using namespace std;
 
 /** Socket Select 模式 : non-block;　1 server -> n clients*/
+/**
+select的优缺点
+优点：
+（1）select的可移植性好，在某些unix下不支持poll.
+（2）select对超时值提供了很好的精度，精确到微秒，而poll式毫秒。
+缺点：
+（1）单个进程可监视的fd数量被限制，默认是1024。
+（2）需要维护一个用来存放大量fd的数据结构，这样会使得用户空间和内核空间在传递该结构时复制开销大。
+（3）对fd进行扫描时是线性扫描，fd剧增后，IO效率降低，每次调用都对fd进行线性扫描遍历，随着fd的增加会造成遍历速度慢的问题。
+（4）select函数超时参数在返回时也是未定义的，考虑到可移植性，每次超时之后进入下一个select之前都要重新设置超时参数。
+*/
 class SelectSocket {
 public:
     SelectSocket();

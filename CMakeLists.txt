@@ -5,6 +5,6 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -std=c++0x -O2 -g3 -fPIC")
 ADD_SUBDIRECTORY(src/udp_socket)
 ADD_SUBDIRECTORY(src/tcp_socket)
 ADD_SUBDIRECTORY(src/select_socket)
-
+ADD_SUBDIRECTORY(src/poll_socket)
 
 
