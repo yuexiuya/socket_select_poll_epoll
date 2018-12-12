@@ -6,5 +6,5 @@ ADD_SUBDIRECTORY(src/udp_socket)
 ADD_SUBDIRECTORY(src/tcp_socket)
 ADD_SUBDIRECTORY(src/select_socket)
 ADD_SUBDIRECTORY(src/poll_socket)
-
+ADD_SUBDIRECTORY(src/epoll_socket)
 
